@@ -1,0 +1,53 @@
+name: ContextQA Web Test Plan
+
+# ---------------------------------------------------------------------------
+# Required repository secrets
+#   CONTEXTQA_TOKEN - API token (token_...) from the plan's CI / CD tab
+#   CQA_SERVER      - https://api.onprem-aws-01.contextqa.info
+#
+# Put this file at .github/workflows/WebTestPlan.yml
+# No app build is needed: web plans run against the URL in the plan/environment.
+# ---------------------------------------------------------------------------
+
+on:
+  workflow_dispatch:
+    inputs:
+      plan_id:
+        description: "Test plan id (must be a web plan)"
+        required: true
+        default: "41"
+      environment:
+        description: "Environment to run against (leave empty for the plan's default)"
+        required: false
+        default: ""
+      timeout_seconds:
+        description: "How long to wait for the run to finish (seconds)"
+        required: false
+        default: "2400"
+
+jobs:
+  run-plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Run ContextQA test plan
+        uses: indivatools/contextqa-ci@v1
+        with:
+          plan-id: ${{ inputs.plan_id }}
+          token: ${{ secrets.CONTEXTQA_TOKEN }}
+          api-url: ${{ secrets.CQA_SERVER }}
+          environment: ${{ inputs.environment }}
+          timeout: ${{ inputs.timeout_seconds }}
+          junit-path: contextqa-results.xml
+          # First test only: report the result without failing the build.
+          # Remove this line once the run completes correctly.
+          fail-on: never
+
+      - name: Upload JUnit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contextqa-results
+          path: contextqa-results.xml
+          if-no-files-found: ignore
