@@ -1,0 +1,62 @@
+name: CQA scenario runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      plan_id:
+        description: "Test plan id"
+        required: true
+      token_secret:
+        description: "Name of the repo secret that holds the token"
+        default: "CONTEXTQA_TOKEN"
+      api_url:
+        description: "API address (empty = use the CQA_SERVER secret)"
+        default: ""
+      platform:
+        description: "none, android or ios"
+        default: "none"
+      build_file:
+        description: "File name in release v1"
+        default: ""
+      fail_on:
+        description: "failure or never"
+        default: "failure"
+      timeout_seconds:
+        description: "Action timeout in seconds"
+        default: "2400"
+      junit:
+        description: "true or false"
+        default: "false"
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Download build
+        if: ${{ inputs.platform != 'none' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FILE: ${{ inputs.build_file }}
+        run: gh release download v1 --repo "${{ github.repository }}" --pattern "$FILE" --dir .
+
+      - name: Run ContextQA
+        id: cqa
+        uses: indivatools/contextqa-ci@v1
+        with:
+          plan-id: ${{ inputs.plan_id }}
+          token: ${{ secrets[inputs.token_secret] }}
+          api-url: ${{ inputs.api_url != '' && inputs.api_url || secrets.CQA_SERVER }}
+          android-build: ${{ inputs.platform == 'android' && inputs.build_file || '' }}
+          ios-build: ${{ inputs.platform == 'ios' && inputs.build_file || '' }}
+          timeout: ${{ inputs.timeout_seconds }}
+          fail-on: ${{ inputs.fail_on }}
+          junit-path: ${{ inputs.junit == 'true' && 'contextqa-junit.xml' || '' }}
+
+      - name: Upload JUnit
+        if: ${{ always() && inputs.junit == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit
+          path: contextqa-junit.xml
+          if-no-files-found: ignore
