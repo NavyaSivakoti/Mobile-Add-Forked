@@ -1,1 +1,58 @@
+name: ContextQA Mobile Test Plan (iOS IPA)
 
+# ---------------------------------------------------------------------------
+# Required repository secrets
+#   CONTEXTQA_TOKEN - API token (token_...) from the plan's CI / CD tab
+#   CQA_SERVER      - https://api.onprem-aws-01.contextqa.info
+#
+# Put this file at .github/workflows/MobilewithIPA.yml
+# ---------------------------------------------------------------------------
+
+on:
+  workflow_dispatch:
+    inputs:
+      plan_id:
+        description: "Test plan id (must be an iOS plan)"
+        required: true
+        default: "41"
+      release_tag:
+        description: "Release tag holding the IPA"
+        required: true
+        default: "v1"
+      ipa_name:
+        description: "IPA filename in the release"
+        required: true
+        default: "app.ipa"
+      timeout_seconds:
+        description: "How long to wait for the run to finish (seconds)"
+        required: false
+        default: "2400"
+
+jobs:
+  run-plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Download IPA from private release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          IPA_NAME: ${{ inputs.ipa_name }}
+        run: |
+          gh release download "$RELEASE_TAG" \
+            --repo "${{ github.repository }}" \
+            --pattern "$IPA_NAME" --dir .
+          ls -lh "$IPA_NAME"
+
+      - name: Run ContextQA test plan
+        uses: indivatools/contextqa-ci@v1
+        with:
+          plan-id: ${{ inputs.plan_id }}
+          token: ${{ secrets.CONTEXTQA_TOKEN }}
+          api-url: ${{ secrets.CQA_SERVER }}
+          ios-build: ${{ inputs.ipa_name }}
+          timeout: ${{ inputs.timeout_seconds }}
+          # First test only: report the result without failing the build.
+          # Remove this line once the run completes correctly.
+          fail-on: never
