@@ -1,0 +1,60 @@
+name: CQA mobile run (validated)
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "android or ios"
+        required: true
+        type: choice
+        options:
+          - android
+          - ios
+      plan_id:
+        description: "Test plan id"
+        required: true
+      build_file:
+        description: "Build file in release v1 (.apk for android, .ipa for ios)"
+        required: true
+      token_secret:
+        description: "Secret holding the ContextQA token"
+        required: true
+      timeout_seconds:
+        description: "Action timeout in seconds"
+        required: true
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check build file matches platform
+        env:
+          PLATFORM: ${{ inputs.platform }}
+          FILE: ${{ inputs.build_file }}
+        run: |
+          case "$PLATFORM" in
+            android) expected=".apk" ;;
+            ios)     expected=".ipa" ;;
+            *) echo "::error::Unknown platform: $PLATFORM"; exit 1 ;;
+          esac
+          case "$FILE" in
+            *"$expected") echo "OK: $FILE is a $expected for $PLATFORM" ;;
+            *) echo "::error::build_file '$FILE' does not end in $expected for platform $PLATFORM"; exit 1 ;;
+          esac
+
+      - name: Download build from release v1
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FILE: ${{ inputs.build_file }}
+        run: gh release download v1 --repo "${{ github.repository }}" --pattern "$FILE" --dir .
+
+      - name: Run ContextQA
+        uses: indivatools/contextqa-ci@v1
+        with:
+          plan-id: ${{ inputs.plan_id }}
+          token: ${{ secrets[inputs.token_secret] }}
+          api-url: ${{ secrets.CQA_SERVER }}
+          android-build: ${{ inputs.platform == 'android' && inputs.build_file || '' }}
+          ios-build: ${{ inputs.platform == 'ios' && inputs.build_file || '' }}
+          timeout: ${{ inputs.timeout_seconds }}
